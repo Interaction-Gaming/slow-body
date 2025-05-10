@@ -1,0 +1,17 @@
+{
+  "name": "slow-body-example",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "express": "^5.0.0-beta.1",
+    "slow-body": "file:../.."
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+} 

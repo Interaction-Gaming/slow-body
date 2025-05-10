@@ -1,0 +1,79 @@
+import express from 'express';
+import { slowBody } from '../../../src';
+
+const app = express();
+const port = 3000;
+
+// Basic request logging middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`${req.method} ${req.url} ${res.statusCode} - ${duration}ms`);
+  });
+  next();
+});
+
+// Use the slow-body middleware with custom options
+app.use(slowBody({
+  chunkTimeout: 2000,    // 2 second timeout between chunks
+  totalTimeout: 5000,    // 5 second total timeout
+}));
+
+// Parse JSON bodies
+app.use(express.json());
+
+// Test endpoint for normal requests
+app.post('/upload', (req, res) => {
+  console.log('Received request body:', req.body);
+  res.json({ 
+    message: 'Request processed successfully',
+    bodySize: JSON.stringify(req.body).length
+  });
+});
+
+// Test endpoint that simulates slow processing
+app.post('/slow', (req, res) => {
+  const chunks: Buffer[] = [];
+  
+  req.on('data', (chunk) => {
+    chunks.push(chunk);
+    // Simulate slow processing by waiting before accepting next chunk
+    req.pause();
+    setTimeout(() => req.resume(), 1000);
+  });
+
+  req.on('end', () => {
+    const body = Buffer.concat(chunks).toString();
+    res.json({ 
+      message: 'Slow request processed',
+      bodySize: body.length
+    });
+  });
+});
+
+// Error handling
+app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Error:', {
+    name: err.name,
+    message: err.message,
+    stack: err.stack,
+    url: req.url,
+    method: req.method,
+    headers: req.headers
+  });
+  
+  res.status(500).json({ 
+    error: err.message,
+    name: err.name,
+    type: 'SlowBodyError'
+  });
+});
+
+app.listen(port, () => {
+  console.log(`Example app listening at http://localhost:${port}`);
+  console.log('\nTest with normal request:');
+  console.log('curl -X POST -H "Content-Type: application/json" -d \'{"test":"data"}\' http://localhost:3000/upload');
+  console.log('\nTest with slow request (should timeout):');
+  console.log('curl -X POST -H "Content-Type: application/json" --data-binary @<(dd if=/dev/zero bs=100 count=1 2>/dev/null | tr "\\0" "a") http://localhost:3000/slow');
+}); 
