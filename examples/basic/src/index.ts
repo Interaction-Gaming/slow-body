@@ -1,5 +1,5 @@
 import express from 'express';
-import { slowBody } from '../../../src';
+import { slowBodyTimeout } from '../../../src';
 
 const app = express();
 const port = 3000;
@@ -15,12 +15,9 @@ app.use((req, res, next) => {
 });
 
 // Use the slow-body middleware with custom options
-app.use(slowBody({
-  chunkTimeout: 2000,    // 2 second timeout between chunks
-  totalTimeout: 5000,    // 5 second total timeout
-}));
+app.use(slowBodyTimeout(2000, console.error));
 
-// Parse JSON bodies
+// Parse JSON bodies - this should not hang if the body is slow to arrive
 app.use(express.json());
 
 // Test endpoint for normal requests
@@ -29,26 +26,6 @@ app.post('/upload', (req, res) => {
   res.json({ 
     message: 'Request processed successfully',
     bodySize: JSON.stringify(req.body).length
-  });
-});
-
-// Test endpoint that simulates slow processing
-app.post('/slow', (req, res) => {
-  const chunks: Buffer[] = [];
-  
-  req.on('data', (chunk) => {
-    chunks.push(chunk);
-    // Simulate slow processing by waiting before accepting next chunk
-    req.pause();
-    setTimeout(() => req.resume(), 1000);
-  });
-
-  req.on('end', () => {
-    const body = Buffer.concat(chunks).toString();
-    res.json({ 
-      message: 'Slow request processed',
-      bodySize: body.length
-    });
   });
 });
 

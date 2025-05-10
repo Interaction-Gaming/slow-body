@@ -1,113 +1,108 @@
-import { Request, Response, NextFunction } from 'express';
-import { Socket } from 'net';
+import { NextFunction, Response, Request } from 'express'
+import { Server } from 'http'
+import { Socket } from 'net'
 
-export interface SlowBodyOptions {
-  /**
-   * Maximum time in milliseconds to wait between receiving chunks of data
-   * @default 5000 (5 seconds)
-   */
-  chunkTimeout?: number;
+/**
+ * This adds socket-level timeout handling to the server, and needs to be called once, after the httpServer is created.
+ * It checks if the client has sent the body of the request within the given time.
+ * If the body is not sent in time, we emit a timeout event on the socket, for Express-level middleware (later in this file)
+ * to handle.
+ */
+export const setupSocketTimeout = (server: Server, time: number = 10000) => {
+  console.log('setting up socket timeout')
 
-  /**
-   * Maximum time in milliseconds to wait for the entire request body
-   * @default 30000 (30 seconds)
-   */
-  totalTimeout?: number;
-}
+  server.on('connection', (socket: Socket) => {
+    let lastDataTime = Date.now()
+    let bytesReceived = 0
+    let headersReceived = false
 
-interface ExtendedSocket extends Socket {
-  _slowBody?: {
-    chunkTimer: NodeJS.Timeout;
-    totalTimer: NodeJS.Timeout;
-    receivedBytes: number;
-    expectedLength?: number;
-  };
-}
+    // Track raw bytes received
+    socket.on('data', (chunk: Buffer) => {
+      lastDataTime = Date.now()
 
-class SlowBodyError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'SlowBodyError';
-  }
+      if (!headersReceived) {
+        // Look for the double CRLF that marks the end of headers
+        const headerEnd = chunk.indexOf('\r\n\r\n')
+        if (headerEnd !== -1) {
+          headersReceived = true
+          // Only count bytes after the headers
+          bytesReceived += chunk.length - (headerEnd + 4)
+        }
+      } else {
+        bytesReceived += chunk.length
+      }
+
+      // request has been fully received
+      if (bytesReceived === (socket as any).contentLength) {
+        clearInterval(checkIntervalId)
+      }
+    })
+
+    // Check for inactivity
+    const checkIntervalId = setInterval(() => {
+      const timeSinceLastData = Date.now() - lastDataTime
+
+      if (timeSinceLastData > time) {
+        socket.emit('timeout')
+        clearInterval(checkIntervalId)
+      }
+    }, 1000)
+
+    socket.on('close', () => {
+      clearInterval(checkIntervalId)
+    })
+  })
+
+  // Get Content-Length from request headers
+  // this is easier than parsing the headers from the raw socket data
+  server.on('request', (req: any, res: any) => {
+    const socket = req.socket
+    if (req.headers['content-length']) {
+      const contentLength = parseInt(req.headers['content-length'], 10)
+      // Store the content length on the socket for the timeout handler to use
+      socket.contentLength = contentLength
+    }
+  })
 }
 
 /**
- * Express middleware to handle slow or badly behaved clients
- * @param options Configuration options
+ * Create a new timeout middleware. This middleware prevents slow- or no-body POST requests from
+ * getting hung up in other middlewares (like the JSON body parser).
+ * Returns a 408 if a body hasn't been received within the timeout.
+ *
+ * @param {number} [time=25000] The timeout as a number of milliseconds
+ * @return {function} middleware
+ * @public
  */
-export function slowBody(options: SlowBodyOptions = {}) {
-  const chunkTimeout = options.chunkTimeout ?? 5000;
-  const totalTimeout = options.totalTimeout ?? 30000;
-
-  return (req: Request, res: Response, next: NextFunction) => {
-    const socket = req.socket as ExtendedSocket;
-    
-    // Skip if socket is already being monitored
-    if (socket._slowBody) {
-      next();
-      return;
+export const slowBodyTimeout = (time: number = 10000, loggingFn: (e: Error) => void = console.error) => {
+  return function (req: Request, res: Response, next: NextFunction) {
+    if (!['POST', 'PUT', 'PATCH'].includes(req.method)) {
+      return next()
     }
 
-    // Parse expected content length
-    const contentLength = parseInt(req.headers['content-length'] || '0', 10);
-    
-    // If no content length or GET/HEAD request, skip monitoring
-    if (!contentLength || ['GET', 'HEAD'].includes(req.method || '')) {
-      next();
-      return;
+    // First mitigation: if the client knows there's no body at all
+    if (req.headers['content-length'] === '0') {
+      res.status(400).send('Empty request body not allowed')
+      return
     }
 
-    // Initialize socket monitoring
-    socket._slowBody = {
-      receivedBytes: 0,
-      expectedLength: contentLength,
-      chunkTimer: setTimeout(() => {
-        const err = new SlowBodyError('Timeout waiting for request body chunk');
-        cleanup();
-        next(err);
-      }, chunkTimeout),
-      totalTimer: setTimeout(() => {
-        const err = new SlowBodyError('Timeout waiting for complete request body');
-        cleanup();
-        next(err);
-      }, totalTimeout)
-    };
+    // Second mitigation: reject the request if socket handling code has received no data for $TIME,
+    // and the request has not been fully received
+    req.socket.on('timeout', () => {
+      loggingFn(new SlowBodyException(`Body not received in time for ${req.method} ${req.originalUrl}`))
+      res.status(408).send('Request Timeout: No body received')
+      res.end()
+      return
+    })
 
-    // Monitor data chunks
-    socket.on('data', (chunk: Buffer) => {
-      const monitoring = socket._slowBody;
-      if (!monitoring) return;
+    next()
+    return
+  }
+}
 
-      // Reset chunk timeout
-      clearTimeout(monitoring.chunkTimer);
-      monitoring.chunkTimer = setTimeout(() => {
-        const err = new SlowBodyError('Timeout waiting for request body chunk');
-        cleanup();
-        next(err);
-      }, chunkTimeout);
-
-      // Track received bytes
-      monitoring.receivedBytes += chunk.length;
-    });
-
-    // Clean up on request end
-    const cleanup = () => {
-      const monitoring = socket._slowBody;
-      if (!monitoring) return;
-
-      clearTimeout(monitoring.chunkTimer);
-      clearTimeout(monitoring.totalTimer);
-      delete socket._slowBody;
-    };
-
-    socket.on('end', cleanup);
-    socket.on('error', (err) => {
-      cleanup();
-      next(err);
-    });
-    res.on('finish', cleanup);
-    res.on('close', cleanup);
-
-    next();
-  };
-} 
+class SlowBodyException extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'SlowBodyException'
+  }
+}

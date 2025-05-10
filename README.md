@@ -1,11 +1,12 @@
 # slow-body
 
-Express middleware to handle badly behaved or slow clients by monitoring request body timing. This middleware helps protect your server from clients that send data too slowly or stall during uploads.
+Express middleware to handle badly behaved or slow clients by monitoring request body timing at the socket level. This middleware helps protect your server from clients that send data too slowly or stall during uploads, preventing them from getting stuck in body parsing middleware.
 
 ## Features
 
-- Monitors time between chunks of data to detect stalled uploads
-- Enforces a total deadline for complete request body delivery
+- Socket-level monitoring before Express middleware processing
+- Precise tracking of headers vs body data
+- Configurable timeout for body delivery
 - Works with Express's error handling system
 - Compatible with other Express middleware
 - TypeScript support
@@ -20,52 +21,64 @@ npm install slow-body
 
 ```typescript
 import express from 'express';
-import { slowBody } from 'slow-body';
+import { setupSocketTimeout, slowBodyTimeout } from 'slow-body';
 
 const app = express();
+const server = app.listen(3000);
 
-// Use with default options (5s chunk timeout, 30s total timeout)
-app.use(slowBody());
+// Set up socket-level timeout handling
+setupSocketTimeout(server, 10000); // 10 second timeout
 
-// Or configure options
-app.use(slowBody({
-  chunkTimeout: 2000,    // 2 second timeout between chunks
-  totalTimeout: 5000     // 5 second total timeout
-}));
+// Add the Express middleware to handle timeouts
+app.use(slowBodyTimeout(10000));
+
+// Now it's safe to use body parsing middleware
+app.use(express.json());
 
 // Your routes here
 app.post('/upload', (req, res) => {
   // Request body will be automatically monitored
-  // Slow requests will be terminated and handled by your error middleware
+  // Slow requests will be terminated before reaching body parsing
 });
 ```
 
-## Options
+## API
 
-- `chunkTimeout` (number): Maximum time in milliseconds to wait between receiving chunks of data (default: 5000)
-- `totalTimeout` (number): Maximum time in milliseconds to wait for the entire request body (default: 30000)
+### setupSocketTimeout(server: Server, time?: number)
+
+Sets up socket-level timeout handling. Must be called after creating the HTTP server.
+
+- `server`: The HTTP server instance
+- `time`: Timeout in milliseconds (default: 10000)
+
+### slowBodyTimeout(time?: number, loggingFn?: (error: Error) => void)
+
+Creates Express middleware to handle socket timeouts.
+
+- `time`: Timeout in milliseconds (default: 10000)
+- `loggingFn`: Optional function to log timeout errors (default: console.error)
 
 ## Error Handling
 
 The middleware integrates with Express's error handling system. When a timeout occurs, it will:
 
-1. Create a `SlowBodyError` with an appropriate message
-2. Clean up any resources
-3. Pass the error to Express's error handling middleware
+1. Create a `SlowBodyException` with an appropriate message
+2. Send a 408 Request Timeout response
+3. Log the error using the provided logging function
 
 Example error handling:
 
 ```typescript
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  if (err.name === 'SlowBodyError') {
+  if (err.name === 'SlowBodyException') {
     console.error('Slow client detected:', {
       url: req.url,
       method: req.method,
       message: err.message
     });
-    res.status(500).json({ 
+    res.status(408).json({ 
       error: err.message,
-      type: 'SlowBodyError'
+      type: 'SlowBodyException'
     });
   } else {
     next(err);
@@ -84,4 +97,4 @@ See the [examples/basic](examples/basic) directory for a complete working exampl
 
 ## License
 
-MIT
+ISC
