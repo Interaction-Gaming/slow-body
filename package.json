@@ -22,9 +22,9 @@
     "timeout"
   ],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "peerDependencies": {
-    "express": "^5.0.0-beta.1"
+    "express": "^5.0.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
