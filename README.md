@@ -5,6 +5,25 @@ The handling of badly behaved or slow clients is a bit fragmented and not well-s
 Servers supporting GraphQL operations, and/or supporting Mobile clients, are particularly vulnerable to the problem of clients slowly drip-feeding their request bodies.
 These bad clients effectively act as a slow loris attack. Rather than keep the sockets open until the request _eventually_, _maybe_ completes, this package will close the connections after a configurable timeout.
 
+## How It Works
+
+When a client connects, the server-level handler attaches custom event emitters (such as `'timeout'` and `'incompleteBody'`) to each socket. These events are triggered if the client is too slow to send headers or the full body.
+
+The provided Express middleware (`slowBodyTimeout`) listens for these socket events and handles them at the request/response layer, making it easier to integrate with your existing Express error handling and logging. This separation of concerns allows you to handle slow clients at both a low level (socket) and a high level (Express), which is rare in the Node/Express ecosystem.
+
+If you prefer, you can listen to these socket events yourself and implement custom handling, bypassing the provided middleware.
+
+```mermaid
+flowchart TD
+    A[Client connects] --> B[Socket created]
+    B --> C{Socket-level handler}
+    C -->|Headers/body too slow| D[Emit 'timeout' or 'incompleteBody' event]
+    C -->|Headers/body OK| E[Request proceeds]
+    D --> F[Express middleware listens for events]
+    F -->|Event received| G[Send error response, destroy socket]
+    E --> H[Express body parser & routes]
+    H --> I[Normal response]
+```
 
 ## Features
 
