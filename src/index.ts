@@ -113,10 +113,8 @@ export const slowBodyTimeout = (
           `Body not received in time for ${req.method} ${req.originalUrl}`
         )
       );
-      if (!res.headersSent) {
-        res.status(408).send("Request Timeout: No body received");
-        res.end();
-      }
+      res.status(408).send("Request Timeout: No body received");
+      res.end();
       req.destroy();
       cleanup();
     };
@@ -127,10 +125,8 @@ export const slowBodyTimeout = (
           `Incomplete body received for ${req.method} ${req.originalUrl}`
         )
       );
-      if (!res.headersSent) {
-        res.status(400).send("Request body incomplete");
-        res.end();
-      }
+      res.status(400).send("Request body incomplete");
+      res.end();
       req.destroy();
       cleanup();
     };
