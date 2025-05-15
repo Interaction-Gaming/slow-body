@@ -114,8 +114,7 @@ export const slowBodyTimeout = (
         )
       );
       res.status(408).send("Request Timeout: No body received");
-      res.end();
-      req.destroy();
+      res.once("finish", () => req.destroy());
       cleanup();
     };
 
@@ -126,8 +125,7 @@ export const slowBodyTimeout = (
         )
       );
       res.status(400).send("Request body incomplete");
-      res.end();
-      req.destroy();
+      res.once("finish", () => req.destroy());
       cleanup();
     };
 
