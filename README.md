@@ -1,6 +1,10 @@
 # slow-body
 
-Express middleware to handle badly behaved or slow clients by monitoring request body timing at the socket level. This middleware helps protect your server from clients that send data too slowly or stall during uploads, preventing them from getting stuck in body parsing middleware.
+The handling of badly behaved or slow clients is a bit fragmented and not well-solved in the Express ecosystem. Most of the problems actually come from Node itself, and Express does not attempt to handle it for you.
+
+Servers supporting GraphQL operations, and/or supporting Mobile clients, are particularly vulnerable to the problem of clients slowly drip-feeding their request bodies.
+These bad clients effectively act as a slow loris attack. Rather than keep the sockets open until the request _eventually_, _maybe_ completes, this package will close the connections after a configurable timeout.
+
 
 ## Features
 
