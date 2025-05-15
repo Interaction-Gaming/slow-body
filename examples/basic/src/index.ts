@@ -15,7 +15,7 @@ app.use((req, res, next) => {
 });
 
 // Use the slow-body middleware with custom options
-app.use(slowBodyTimeout(2000, console.error));
+app.use(slowBodyTimeout(console.error));
 
 // Parse JSON bodies - this should not hang if the body is slow to arrive
 app.use(express.json());

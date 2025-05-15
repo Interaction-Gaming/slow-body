@@ -97,4 +97,4 @@ See the [examples/basic](examples/basic) directory for a complete working exampl
 
 ## License
 
-ISC
+MIT
