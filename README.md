@@ -5,6 +5,8 @@ The handling of badly behaved or slow clients is a bit fragmented and not well-s
 Servers supporting GraphQL operations, and/or supporting Mobile clients, are particularly vulnerable to the problem of clients slowly drip-feeding their request bodies.
 These bad clients effectively act as a slow loris attack. Rather than keep the sockets open until the request _eventually_, _maybe_ completes, this package will close the connections after a configurable timeout.
 
+This *is* rather rude, and clients will probably throw exceptions when they try to write their next byte to a closed socket.
+
 ## How It Works
 
 When a client connects, the server-level handler attaches custom event emitters (such as `'timeout'` and `'incompleteBody'`) to each socket. These events are triggered if the client is too slow to send headers or the full body.
