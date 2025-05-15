@@ -17,7 +17,7 @@ interface SlowBodySocket extends Socket {
  * If the body is not sent in time, we emit a timeout event on the socket, for Express-level middleware to handle.
  * Note that you do need to handle the timeout event in your Express-level middleware - either with a custom middleware, or with the default one in this package.
  */
-export const setupSocketTimeout = (server: Server, time: number = 10000) => {
+export const setupSocketTimeout = (time: number = 10000, server: Server) => {
   server.on("connection", (socket: SlowBodySocket) => {
     let firstByteTime: number | undefined = undefined;
     const connectionOpenTime = Date.now();
@@ -94,6 +94,7 @@ export const setupSocketTimeout = (server: Server, time: number = 10000) => {
  * @public
  */
 export const slowBodyTimeout = (
+  time: number = 10000,
   loggingFn: (e: Error) => void = console.error
 ) => {
   return function (req: Request, res: Response, next: NextFunction) {

@@ -1,11 +1,14 @@
 # slow-body
 
-The handling of badly behaved or slow clients is a bit fragmented and not well-solved in the Express ecosystem. Most of the problems actually come from Node itself, and Express does not attempt to handle it for you.
+The handling of badly behaved or slow clients is a bit fragmented and not well-solved in the Express ecosystem. Node is not helping matters, and Express does not attempt to handle it for you.
+
+To be fair, this specific scenario is limited by the HTTP 1.1 spec, which Node is adhering to strictly here. It requires that the entirety of request bodies are read before a response can be written.
 
 Servers supporting GraphQL operations, and/or supporting Mobile clients, are particularly vulnerable to the problem of clients slowly drip-feeding their request bodies.
 These bad clients effectively act as a slow loris attack. Rather than keep the sockets open until the request _eventually_, _maybe_ completes, this package will close the connections after a configurable timeout.
 
 This *is* rather rude, and clients will probably throw exceptions when they try to write their next byte to a closed socket.
+
 
 ## How It Works
 
@@ -50,50 +53,83 @@ import { setupSocketTimeout, slowBodyTimeout } from 'slow-body';
 
 const app = express();
 const port = 3000;
+
+// Basic request logging middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    console.log(`${req.method} ${req.url} ${res.statusCode} - ${duration}ms`);
+  });
+  next();
+});
+
+// Use the slow-body middleware with custom options
+app.use(slowBodyTimeout(10000, console.error));
+
+// Parse JSON bodies - this should not hang if the body is slow to arrive
+app.use(express.json());
+
+// Test endpoint for normal requests
+app.post("/upload", (req, res) => {
+  console.log("Received request body:", req.body);
+  res.json({
+    message: "Request processed successfully",
+    bodySize: JSON.stringify(req.body).length,
+  });
+});
+
+// Generic error handler (slow body errors are handled directly by the middleware above)
+app.use((err, req, res, next) => {
+  console.error("Error:", {
+    name: err.name,
+    message: err.message,
+    stack: err.stack,
+    url: req.url,
+    method: req.method,
+    headers: req.headers,
+  });
+  res.status(500).json({
+    error: err.message,
+    name: err.name,
+  });
+});
+
 const server = app.listen(port, () => {
   console.log(`Example app listening at http://localhost:${port}`);
 });
 
 // Set up socket-level timeout handling (must be called after app.listen)
-setupSocketTimeout(server, 10000); // 10 second timeout
-
-// Add the Express middleware to handle timeouts
-app.use(slowBodyTimeout(console.error));
-
-// Now it's safe to use body parsing middleware
-app.use(express.json());
-
-// Your routes here
-app.post('/upload', (req, res) => {
-  // Request body will be automatically monitored
-  // Slow requests will be terminated before reaching body parsing
-});
+setupSocketTimeout(10000, server); // 10s timeout
 ```
 
 ## API
 
-### setupSocketTimeout(server: Server, time?: number)
+### setupSocketTimeout(time: number, server: Server)
 
 Sets up socket-level timeout handling. Must be called after creating the HTTP server.
 
-- `server`: The HTTP server instance
 - `time`: Timeout in milliseconds (default: 10000)
+- `server`: The HTTP server instance
 
-### slowBodyTimeout(loggingFn?: (error: Error) => void)
+### slowBodyTimeout(time?: number, loggingFn?: (error: Error) => void)
 
 Creates Express middleware to handle socket timeouts.
 
+- `time`: Timeout in milliseconds (default: 10000)
 - `loggingFn`: Optional function to log timeout errors (default: console.error)
 
-## Error Handling
+## Error Handling & Node.js HTTP Protocol Limitations
 
-The middleware handles slow body errors directly by sending a response and destroying the request. It does not call `next(err)`. For other errors, use a standard Express error handler.
+The middleware attempts to send a 408 (timeout) or 400 (incomplete body) response and then destroys the request. **However, due to Node.js's strict HTTP/1.1 protocol enforcement, if the request body is not fully received, the response may not actually be sent and the client may see a connection reset or protocol error instead.**
+
+This is a limitation of Node.js and the HTTP/1.1 spec: the server is expected to read the entire request body before sending a response. Destroying the socket is the only way to immediately free resources, but it means the client will not receive a valid HTTP response.
 
 When a timeout or incomplete body is detected, the middleware will:
 
 1. Log the error using the provided logging function
-2. Send a 408 (timeout) or 400 (incomplete body) response
-3. Call both `res.end()` and `req.destroy()` to ensure the socket is closed and not left in-use (this prevents resource leaks and slowloris attacks)
+2. Send a 408 (timeout) or 400 (incomplete body) response, if possible
+3. Call `req.destroy()` to ensure the socket is closed and not left in-use (this prevents resource leaks and slowloris attacks)
 
 **Note:** You do not need to handle slow body errors in your error handler, but you should still have a generic error handler for other errors.
 
