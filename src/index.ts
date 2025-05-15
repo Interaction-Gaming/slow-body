@@ -19,13 +19,15 @@ interface SlowBodySocket extends Socket {
  */
 export const setupSocketTimeout = (server: Server, time: number = 10000) => {
   server.on('connection', (socket: SlowBodySocket) => {
-    let lastDataTime = Date.now()
+    let firstByteTime
     socket[kBytesReceived] = 0
     let headersReceived = false
 
     // Track raw bytes received
     socket.on('data', (chunk: Buffer) => {
-      lastDataTime = Date.now()
+      if (firstByteTime === undefined) {
+        firstByteTime = Date.now()
+      }
 
       if (!headersReceived) {
         // Look for the double CRLF that marks the end of headers
@@ -47,9 +49,9 @@ export const setupSocketTimeout = (server: Server, time: number = 10000) => {
 
     // Check for inactivity
     const checkIntervalId = setInterval(() => {
-      const timeSinceLastData = Date.now() - lastDataTime
+      const timeSinceFirstByte = Date.now() - firstByteTime
 
-      if (timeSinceLastData > time) {
+      if (timeSinceFirstByte > time) {
         socket.emit('timeout')
         clearInterval(checkIntervalId)
       }
