@@ -113,8 +113,7 @@ export const slowBodyTimeout = (
           `Body not received in time for ${req.method} ${req.originalUrl}`
         )
       );
-      res.status(408).send("Request Timeout: No body received");
-      res.once("finish", () => req.destroy());
+      res.status(408).send("Request Timeout: No body received"); // Typically won't actually send this
       cleanup();
     };
 
@@ -124,8 +123,7 @@ export const slowBodyTimeout = (
           `Incomplete body received for ${req.method} ${req.originalUrl}`
         )
       );
-      res.status(400).send("Request body incomplete");
-      res.once("finish", () => req.destroy());
+      res.status(400).send("Request body incomplete"); // Typically won't actually send this
       cleanup();
     };
 
@@ -134,6 +132,7 @@ export const slowBodyTimeout = (
       req.socket.removeListener("incompleteBody", onIncomplete);
       res.removeListener("finish", cleanup);
       res.removeListener("close", cleanup);
+      req.destroy();
     }
 
     req.socket.on("timeout", onTimeout);
