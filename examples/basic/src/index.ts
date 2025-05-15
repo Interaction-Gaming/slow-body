@@ -1,5 +1,5 @@
 import express from 'express';
-import { slowBodyTimeout } from '../../../src';
+import { setupSocketTimeout, slowBodyTimeout } from '../../../src';
 
 const app = express();
 const port = 3000;
@@ -29,7 +29,7 @@ app.post('/upload', (req, res) => {
   });
 });
 
-// Error handling
+// Generic error handler (slow body errors are handled directly by the middleware above)
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', {
     name: err.name,
@@ -39,18 +39,19 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
     method: req.method,
     headers: req.headers
   });
-  
   res.status(500).json({ 
     error: err.message,
-    name: err.name,
-    type: 'SlowBodyError'
+    name: err.name
   });
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`Example app listening at http://localhost:${port}`);
   console.log('\nTest with normal request:');
   console.log('curl -X POST -H "Content-Type: application/json" -d \'{"test":"data"}\' http://localhost:3000/upload');
   console.log('\nTest with slow request (should timeout):');
   console.log('curl -X POST -H "Content-Type: application/json" --data-binary @<(dd if=/dev/zero bs=100 count=1 2>/dev/null | tr "\\0" "a") http://localhost:3000/slow');
-}); 
+});
+
+// Set up socket-level timeout handling (must be called after app.listen)
+setupSocketTimeout(server, 10000); // 10s timeout 

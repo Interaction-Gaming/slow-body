@@ -24,13 +24,16 @@ import express from 'express';
 import { setupSocketTimeout, slowBodyTimeout } from 'slow-body';
 
 const app = express();
-const server = app.listen(3000);
+const port = 3000;
+const server = app.listen(port, () => {
+  console.log(`Example app listening at http://localhost:${port}`);
+});
 
-// Set up socket-level timeout handling
+// Set up socket-level timeout handling (must be called after app.listen)
 setupSocketTimeout(server, 10000); // 10 second timeout
 
 // Add the Express middleware to handle timeouts
-app.use(slowBodyTimeout(10000));
+app.use(slowBodyTimeout(console.error));
 
 // Now it's safe to use body parsing middleware
 app.use(express.json());
@@ -51,40 +54,23 @@ Sets up socket-level timeout handling. Must be called after creating the HTTP se
 - `server`: The HTTP server instance
 - `time`: Timeout in milliseconds (default: 10000)
 
-### slowBodyTimeout(time?: number, loggingFn?: (error: Error) => void)
+### slowBodyTimeout(loggingFn?: (error: Error) => void)
 
 Creates Express middleware to handle socket timeouts.
 
-- `time`: Timeout in milliseconds (default: 10000)
 - `loggingFn`: Optional function to log timeout errors (default: console.error)
 
 ## Error Handling
 
-The middleware integrates with Express's error handling system. When a timeout occurs, it will:
+The middleware handles slow body errors directly by sending a response and destroying the request. It does not call `next(err)`. For other errors, use a standard Express error handler.
 
-1. Create a `SlowBodyException` with an appropriate message
-2. Send a 408 Request Timeout response
-3. Log the error using the provided logging function
+When a timeout or incomplete body is detected, the middleware will:
 
-Example error handling:
+1. Log the error using the provided logging function
+2. Send a 408 (timeout) or 400 (incomplete body) response
+3. Call both `res.end()` and `req.destroy()` to ensure the socket is closed and not left in-use (this prevents resource leaks and slowloris attacks)
 
-```typescript
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  if (err.name === 'SlowBodyException') {
-    console.error('Slow client detected:', {
-      url: req.url,
-      method: req.method,
-      message: err.message
-    });
-    res.status(408).json({ 
-      error: err.message,
-      type: 'SlowBodyException'
-    });
-  } else {
-    next(err);
-  }
-});
-```
+**Note:** You do not need to handle slow body errors in your error handler, but you should still have a generic error handler for other errors.
 
 ## Example
 

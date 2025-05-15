@@ -61,7 +61,7 @@ export const setupSocketTimeout = (server: Server, time: number = 10000) => {
 
     // Check for incomplete body on end
     socket.on('end', () => {
-      if ( socket[kBytesReceived] !== socket[kContentLength]) {
+      if (socket[kBytesReceived] !== socket[kContentLength]) {
         // Incomplete body
         socket.emit('incompleteBody')
       }
@@ -95,33 +95,43 @@ export const slowBodyTimeout = (loggingFn: (e: Error) => void = console.error) =
       return next()
     }
 
-    // First mitigation: if the client knows there's no body at all
     if (req.headers['content-length'] === '0') {
       res.status(400).send('Empty request body not allowed')
       return
     }
 
-    // Second mitigation: reject the request if socket-level timeout is triggered
-    req.socket.once('timeout', () => {
+    // Handler references for cleanup
+    const onTimeout = () => {
       loggingFn(new SlowBodyException(`Body not received in time for ${req.method} ${req.originalUrl}`))
       if (!res.headersSent) {
         res.status(408).send('Request Timeout: No body received')
         res.end()
       }
-      req.destroy() // ensure the socket is able to be reused
-      return
-    })
+      req.destroy()
+      cleanup()
+    }
 
-    // Third mitigation: reject the request if the body is incomplete on end
-    req.socket.once('incompleteBody', () => {
+    const onIncomplete = () => {
       loggingFn(new SlowBodyException(`Incomplete body received for ${req.method} ${req.originalUrl}`))
       if (!res.headersSent) {
         res.status(400).send('Request body incomplete')
         res.end()
       }
-      req.destroy() // ensure the socket is able to be reused
-      return
-    })
+      req.destroy()
+      cleanup()
+    }
+
+    function cleanup() {
+      req.socket.removeListener('timeout', onTimeout)
+      req.socket.removeListener('incompleteBody', onIncomplete)
+      res.removeListener('finish', cleanup)
+      res.removeListener('close', cleanup)
+    }
+
+    req.socket.on('timeout', onTimeout)
+    req.socket.on('incompleteBody', onIncomplete)
+    res.on('finish', cleanup)
+    res.on('close', cleanup)
 
     next()
     return
