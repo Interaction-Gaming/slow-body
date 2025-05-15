@@ -94,7 +94,6 @@ export const setupSocketTimeout = (time: number = 10000, server: Server) => {
  * @public
  */
 export const slowBodyTimeout = (
-  time: number = 10000,
   loggingFn: (e: Error) => void = console.error
 ) => {
   return function (req: Request, res: Response, next: NextFunction) {

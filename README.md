@@ -65,7 +65,7 @@ app.use((req, res, next) => {
 });
 
 // Use the slow-body middleware with custom options
-app.use(slowBodyTimeout(10000, console.error));
+app.use(slowBodyTimeout(console.error));
 
 // Parse JSON bodies - this should not hang if the body is slow to arrive
 app.use(express.json());
@@ -112,11 +112,10 @@ Sets up socket-level timeout handling. Must be called after creating the HTTP se
 - `time`: Timeout in milliseconds (default: 10000)
 - `server`: The HTTP server instance
 
-### slowBodyTimeout(time?: number, loggingFn?: (error: Error) => void)
+### slowBodyTimeout(loggingFn?: (error: Error) => void)
 
 Creates Express middleware to handle socket timeouts.
 
-- `time`: Timeout in milliseconds (default: 10000)
 - `loggingFn`: Optional function to log timeout errors (default: console.error)
 
 ## Error Handling & Node.js HTTP Protocol Limitations
