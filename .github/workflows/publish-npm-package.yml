@@ -1,0 +1,42 @@
+name: publish to npm
+
+on: workflow_dispatch
+#on:
+#  push:
+#    branches: [experiment]
+
+jobs:
+  publish-npm-package:
+    name: Publish NPM Package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: write
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: git config
+        run: |
+          git config user.email "github-actions@github.com"
+          git config user.name "github-actions"
+      - name: Get npm cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@interaction-gaming'
+      - run: npm ci --prefer-offline
+      - run: npm run build
+      - run: npm version patch # this bumps the patch version in package.json, commits the change, and tags that commit with the same version.
+      - run: git push -u origin main --follow-tags
+      - run: npm publish
