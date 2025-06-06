@@ -1,6 +1,6 @@
 name: publish to npm
 
-on: workflow_dispatch
+#on: workflow_dispatch
 on:
   push:
     branches: [master]
