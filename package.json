@@ -4,6 +4,9 @@
   "description": "Express-compatible middleware to handle badly behaved or slow clients",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "publishConfig": {
+    "@interaction-gaming:registry": "https://npm.pkg.github.com"
+  },
   "files": [
     "dist",
     "README.md",
@@ -14,6 +17,10 @@
     "prepare": "npm run build",
     "test": "jest",
     "lint": "eslint src --ext .ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/Interaction-Gaming/slow-body",
   },
   "keywords": [
     "express",
