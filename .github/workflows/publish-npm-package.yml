@@ -36,7 +36,7 @@ jobs:
           scope: '@interaction-gaming'
       - run: npm ci --prefer-offline
       - run: git status
-      - run:
+      - run: |
           git add .
           git commit -m 'update'
       - run: npm version patch # this bumps the patch version in package.json, commits the change, and tags that commit with the same version.
