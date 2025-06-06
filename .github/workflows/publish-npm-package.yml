@@ -40,5 +40,5 @@ jobs:
           git add .
           git commit -m 'update'
       - run: npm version patch # this bumps the patch version in package.json, commits the change, and tags that commit with the same version.
-      - run: git push -u origin main --follow-tags
+      - run: git push -u origin master --follow-tags
       - run: npm publish
