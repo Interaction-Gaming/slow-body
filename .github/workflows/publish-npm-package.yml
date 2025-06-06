@@ -1,15 +1,14 @@
 name: publish to npm
 
 on: workflow_dispatch
-#on:
-#  push:
-#    branches: [experiment]
+on:
+  push:
+    branches: [master]
 
 jobs:
   publish-npm-package:
     name: Publish NPM Package
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     permissions:
       contents: write
       packages: write

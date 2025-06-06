@@ -1,5 +1,5 @@
 {
-  "name": "slow-body",
+  "name": "@Interaction-Gaming/slow-body",
   "version": "1.0.11",
   "description": "Express-compatible middleware to handle badly behaved or slow clients",
   "main": "dist/index.js",
